@@ -1,6 +1,6 @@
 # spider-info-webservice
 
-Scrapy extension for monitoring your spiders. Inspired by Scrapy's built-in Telnet console extension and deprecated `scrapy-jsonrpc` (https://github.com/scrapy-plugins/scrapy-jsonrpc).
+Scrapy extension for monitoring your spiders. Inspired by Scrapy's built-in Telnet console extension and deprecated `scrapy-jsonrpc` (https://github.com/scrapy-plugins/scrapy-jsonrpc) and also presented in Scrapy 0.24 WebService built-in extension (https://docs.scrapy.org/en/0.24/topics/webservice.html).
 
 Every time I used Telnet, it all came down to calling several methods to show information, so I made this extension, which conveniently serves basic information about spider via HTTP.
 

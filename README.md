@@ -5,12 +5,16 @@ Scrapy extension for monitoring your spiders. Inspired by Scrapy's built-in Teln
 Every time I used Telnet, it all came down to calling several methods to show information, so I made this extension, which conveniently serves basic information about spider via HTTP.
 
 ## Installation
+```
+pip install spider-info-webservice
+```
 
-Will upload to pypi soon.
+or
 
 ```
 pip install git+https://github.com/abebus/spider-info-webservice
 ```
+
 
 ### Dependencies
 

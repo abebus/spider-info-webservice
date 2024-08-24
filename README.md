@@ -44,6 +44,8 @@ All done! Now you can access to endpoints via your favourite cli http request to
 
 `INFO_REPORT_URL`: optional. Extension will send a request to a given url with json containing general info about running spider and `host:port` of this service. 
 
+`INFO_SERVICE_SENSITIVE_KEYS`: optional, defaults to `[r"^INFO_SERVICE_USERS$", r".*_PASS(?:WORD)?$", r".*_USER(?:NAME)?$"]`. List of strings, that will compile to regex. They will try to match all keys in `settings` (recursively) and if key is matched, replace value with asterisks.
+
 ### Endpoints
 
 `info/general`: General info.

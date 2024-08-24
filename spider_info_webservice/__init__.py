@@ -1,11 +1,12 @@
-__version__ = "0.0.1"
-
 from __future__ import annotations
+
+__version__ = "0.0.2"
 
 import logging
 from typing import TYPE_CHECKING
 import scrapy
 import scrapy.signals
+from scrapy.exceptions import NotConfigured
 from scrapy.utils.defer import maybe_deferred_to_future
 
 from .utils import get_child_resources, create_port, get_project_name_from_config
@@ -32,6 +33,10 @@ class InfoService:
 
         self.portrange = crawler.settings.get("STATS_SERVER_PORTRANGE", (6024, 8000))
         self.host = crawler.settings.get("STATS_SERVER_HOST", "127.0.0.1")
+        self.settings_sensetive_keys = crawler.settings.get(
+            "INFO_SERVICE_SENSITIVE_KEYS",
+            [r"^INFO_SERVICE_USERS$", r".*_PASS(?:WORD)?$", r".*_USER(?:NAME)?$"],
+        )
         self.users = crawler.settings.get("INFO_SERVICE_USERS", {"scrapy": b"scrapy"})
         self.general_data = {}
         self.port: Port | None = None
@@ -46,29 +51,34 @@ class InfoService:
                 host=self.host,
                 portrange=self.portrange,
                 crawler=self.crawler,
+                sensetive_keys=self.settings_sensetive_keys,
             )
             logger.info(
                 f"Service started on {self.port.getHost().host}:{self.port.getHost().port}"
             )
         except OSError:
-            logger.warning(f"Failed to start service in portrange {self.portrange}")
+            raise NotConfigured(
+                f"Failed to start service in portrange {self.portrange}"
+            )
 
         import os
         from scrapy.utils.versions import scrapy_components_versions
 
-        self.general_data.update({
-            "pid": os.getpid(),
-            "project_name": get_project_name_from_config(),
-            "bot_name": self.crawler.settings.get("BOT_NAME"),
-            "spider_name": self.crawler.spider.name,
-            "info_service_host": self.port.getHost().host,
-            "info_service_port": self.port.getHost().port,
-            "base_versions": {
-                "Scrapy": scrapy.__version__,
-                **{name: version for name, version in scrapy_components_versions()},
-            },
-            "available_resources": get_child_resources(r),
-        })
+        self.general_data.update(
+            {
+                "pid": os.getpid(),
+                "project_name": get_project_name_from_config(),
+                "bot_name": self.crawler.settings.get("BOT_NAME"),
+                "spider_name": self.crawler.spider.name,
+                "info_service_host": self.port.getHost().host,
+                "info_service_port": self.port.getHost().port,
+                "base_versions": {
+                    "Scrapy": scrapy.__version__,
+                    **{name: version for name, version in scrapy_components_versions()},
+                },
+                "available_resources": get_child_resources(r),
+            }
+        )
         root_resource.g_r.general_data = self.general_data
 
     async def _stop(self):
@@ -85,8 +95,13 @@ class InfoService:
             return
 
         import urllib.request
+        import json
 
-        urllib.request.urlopen(info_report_url, data=self.general_data)
+        data = json.dumps(self.general_data).encode("utf-8")
+        req = urllib.request.Request(
+            info_report_url, data=data, headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req)
 
     def default_stop_callback(self):
         pass

@@ -5,7 +5,13 @@ from scrapy.settings import BaseSettings
 from scrapy.utils.engine import get_engine_status
 from twisted.web import resource
 
-from .utils import convert_bytes_to_str_in_dict, settings_to_dict, dumps_as_bytes
+from .utils import (
+    convert_bytes_to_str_in_dict,
+    settings_to_dict,
+    dumps_as_bytes,
+    hide_sensitive_data,
+    build_single_regexp_for_keys,
+)
 
 if TYPE_CHECKING:
     from scrapy.core.engine import ExecutionEngine, Slot
@@ -46,13 +52,15 @@ class SettingsResource(Resource):
 
     isLeaf = True
 
-    def __init__(self, settings: BaseSettings):
+    def __init__(self, settings: BaseSettings, sensetive_keys: list[str]):
         super().__init__()
         self.settings = settings
+        self.sensetive_keys = build_single_regexp_for_keys(sensetive_keys)
 
     def render_GET(self, request: Request) -> bytes:
         request.setHeader(b"Content-Type", b"application/json")
         response_data = settings_to_dict(self.settings)
+        hide_sensitive_data(response_data, self.sensetive_keys)
         return dumps_as_bytes(response_data, default=str)
 
 
@@ -101,12 +109,12 @@ class GeneralDataResource(Resource):
 class RootResource(Resource):
     """Root resource, only used for the /info/ endpoint, no other uses"""
 
-    def __init__(self, crawler: Crawler):
+    def __init__(self, crawler: Crawler, sensetive_keys: list[str] = []):
         super().__init__()
 
         self.putChild(b"engine", EngineStatusResource(crawler.engine))
         self.putChild(b"stats", StatsResource(crawler.stats))
-        self.putChild(b"settings", SettingsResource(crawler.settings))
+        self.putChild(b"settings", SettingsResource(crawler.settings, sensetive_keys))
         self.putChild(b"slot", SlotResource(crawler.engine.slot))
         self.g_r = GeneralDataResource()
         self.putChild(b"general", self.g_r)

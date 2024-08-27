@@ -52,7 +52,7 @@ All done! Now you can access to endpoints via your favourite cli http request to
 
 Example response: 
 
-```python
+```json
 {
   "pid": 1605,
   "project_name": "quotes_scraper/name_from_scrapy.cfg",
@@ -123,7 +123,7 @@ Example response:
 `info/stats`: Spider stats (`crawler.stats.get_stats()`)
 
 Example response:
-```python
+```json
 {
   "log_count/WARNING": 1,
   "log_count/DEBUG": 6,
@@ -150,7 +150,7 @@ Example response:
 `info/slot`: list of in-progress requests.
 
 Example response:
-```python
+```json
 {
   "in_progress_requests": [
     {
@@ -226,7 +226,7 @@ Example response:
 `info/engine`: Info about execution engine.
 
 Example response:
-```python
+```json
 {
   "time()-engine.start_time": 423.9953444004059,
   "len(engine.downloader.active)": 0,

@@ -13,7 +13,7 @@ setup(
     long_description_content_type='text/markdown',
     author="abebus",
     author_email="anamaev263@gmail.com",
-    version="0.0.3",
+    version="0.0.3.1",
     url="https://github.com/abebus/spider-info-webservice",
     packages=find_packages(),
     install_requires=["scrapy>=2.6"],

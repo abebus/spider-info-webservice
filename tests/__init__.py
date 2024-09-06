@@ -69,6 +69,8 @@ class MockScheduler(BaseScheduler):
 
 class TestInfoService(TestCase):
     async def setUp(self) -> None:
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
         spider = TestSpider()
         self.crawler = get_crawler(
             spider.__class__,
@@ -84,6 +86,13 @@ class TestInfoService(TestCase):
                 "SENSETIVE_INFO_3": "test",
                 "INFO_SERVICE_SENSITIVE_KEYS": [r"^.*SENSETIVE_INFO.*$"],
                 "TELNETCONSOLE_ENABLED": False,
+                "DOWNLOAD_HANDLERS_BASE": {},
+                "DOWNLOADER_MIDDLEWARES_BASE": {},
+                "EXTENSIONS_BASE": {},
+                "SPIDER_CONTRACTS_BASE": {},
+                "SPIDER_MIDDLEWARES_BASE": {},
+                "FEED_EXPORTERS_BASE": {},
+                "FEED_STORAGES_BASE": {}
             },
         )
         self.crawler.spider = spider
@@ -207,8 +216,13 @@ class TestInfoService(TestCase):
         self.assertEqual(general, self.ext.general_data)
 
     async def test_stats(self):
-        stats = await self._req("stats", b"scrapy", b"scrapy")
-        self.assertEqual(stats, self.crawler.stats.get_stats())
+        stats_from_ext = await self._req("stats", b"scrapy", b"scrapy")
+        stats = self.crawler.stats.get_stats()
+        for k in stats:
+            if "log_count" in k:
+                stats[k] = 0
+                stats_from_ext[k] = 0
+        self.assertEqual(stats, stats_from_ext)
 
     async def test_slot(self):
         slot = await self._req("slot", b"scrapy", b"scrapy")

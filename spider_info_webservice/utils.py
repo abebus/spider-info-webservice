@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Sequence
 
-from scrapy.settings import BaseSettings
+from scrapy.settings import BaseSettings, iter_default_settings
 from scrapy.utils.conf import get_config
 from scrapy.utils.reactor import listen_tcp
 from twisted.cred.checkers import InMemoryUsernamePasswordDatabaseDontUse
@@ -20,16 +21,24 @@ if TYPE_CHECKING:
     from .resources import RootResource
 
 try:
-    import orjson
+    import orjson # type: ignore 
 except ImportError:
     import json
 
     def dumps_as_bytes(obj, **kwargs) -> bytes:
-        return json.dumps(obj, **kwargs, default=str).encode()
+        if default := kwargs.pop("default", None):
+            default = default
+        else:
+            default = str
+        return json.dumps(obj, **kwargs, default=default).encode()
 else:
 
     def dumps_as_bytes(obj, **kwargs) -> bytes:
-        return orjson.dumps(obj, **kwargs, default=str)
+        if default := kwargs.popi("default", None):
+            default = default
+        else:
+            default = str
+        return orjson.dumps(obj, **kwargs, default=default)
 
 
 def build_single_regexp_for_keys(keys: list[str]) -> re.Pattern:
@@ -57,14 +66,14 @@ def get_project_name_from_config() -> str:
     return "None. No project name found"
 
 
-def create_port(
-    users: dict[str, bytes], host, portrange, crawler, sensetive_keys
+def create(
+    users: dict[str, bytes], host, portrange, crawler, resources, resources_child_prefix
 ) -> tuple[resource.Resource, RootResource, Port]:
     from .resources import RootResource
 
     checkers = [InMemoryUsernamePasswordDatabaseDontUse(**users)]
     r = resource.Resource()
-    root_resource = RootResource(crawler, sensetive_keys)
+    root_resource = RootResource(crawler, resources, resources_child_prefix)
     r.putChild(b"info", root_resource)
     portal = Portal(SimpleRealm(r), checkers)
     r2 = guard.HTTPAuthSessionWrapper(portal, [guard.BasicCredentialFactory("auth")])
@@ -80,17 +89,36 @@ def create_port(
     )
 
 
-def settings_to_dict(settings: BaseSettings) -> dict[str, Any]:
+def convert_value(value):
+    if isinstance(value, (BaseSettings, dict)):
+        value = prepare_for_serialisation(value)
+    elif isinstance(value, bytes):
+        value = value.decode()
+    elif inspect.isclass(value) and not isinstance(value, str):
+        value = str(value)
+    elif isinstance(value, (list, tuple, set)):
+        value = [convert_value(v) for v in value]
+    return value
+
+
+def prepare_for_serialisation(dict_: BaseSettings | dict) -> dict[str, Any]:
     dictionary = {}
-    for key, value in settings.items():
+    for key, value in dict_.items():
         if isinstance(key, bytes):
             key = key.decode()
-        if isinstance(value, BaseSettings):
-            value = settings_to_dict(value)
-        elif isinstance(value, bytes):
-            value = value.decode()
+
+        value = convert_value(value)
+
         dictionary[key] = value
     return dictionary
+
+
+def not_default_settings(settings: BaseSettings) -> Iterable[tuple[str, Any]]:
+    """Return an iterable of the settings that have been overridden"""
+    defset = dict(iter_default_settings())
+    for name, value in settings.items():
+        if name not in defset or defset[name] != value:
+            yield name, value
 
 
 def convert_bytes_to_str_in_dict(dict_: dict):

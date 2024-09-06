@@ -1,19 +1,25 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from functools import wraps
+
 from scrapy.settings import BaseSettings
 from scrapy.utils.engine import get_engine_status
+from scrapy.utils.misc import load_object
 from twisted.web import resource
 
 from .utils import (
+    build_single_regexp_for_keys,
     convert_bytes_to_str_in_dict,
-    settings_to_dict,
     dumps_as_bytes,
     hide_sensitive_data,
-    build_single_regexp_for_keys,
+    not_default_settings,
+    prepare_for_serialisation,
 )
 
 if TYPE_CHECKING:
+    from typing import Any, Iterable
+
     from scrapy.core.engine import ExecutionEngine, Slot
     from scrapy.crawler import Crawler
     from scrapy.statscollectors import StatsCollector
@@ -24,6 +30,20 @@ class Resource(resource.Resource):
     from . import logger
 
 
+def add_debug_logging_to_render(f):
+    from . import logger
+
+    @wraps(f)
+    def wrapper(self, request: Request):
+        logger.debug(
+            f"GET request received from {request.getClientIP()}: {request} with headers: {request.getAllHeaders()}"
+        )
+        res = f(self, request)
+        logger.debug(f"Response: {res}")
+        return res
+
+    return wrapper
+
 class SlotResource(Resource):
     """Slot resource, returns engine's slot.inprogress request.to_dict()"""
 
@@ -33,8 +53,8 @@ class SlotResource(Resource):
         super().__init__()
         self.slot = slot
 
+    @add_debug_logging_to_render
     def render_GET(self, request: Request) -> bytes:
-        self.logger.debug(f"GET request received: {request}")
         request.setHeader(b"Content-Type", b"application/json")
         response_data = {
             "in_progress_requests": [
@@ -57,11 +77,17 @@ class SettingsResource(Resource):
         self.settings = settings
         self.sensetive_keys = build_single_regexp_for_keys(sensetive_keys)
 
+    @add_debug_logging_to_render
     def render_GET(self, request: Request) -> bytes:
         request.setHeader(b"Content-Type", b"application/json")
-        response_data = settings_to_dict(self.settings)
+        if request.args.get(b"all", [b"false"])[0] == b"true":
+            response_data = prepare_for_serialisation(self.settings)
+        else:
+            response_data = prepare_for_serialisation(
+                dict(not_default_settings(self.settings))
+            )
         hide_sensitive_data(response_data, self.sensetive_keys)
-        return dumps_as_bytes(response_data, default=str)
+        return dumps_as_bytes(response_data)
 
 
 class EngineStatusResource(Resource):
@@ -73,6 +99,7 @@ class EngineStatusResource(Resource):
         super().__init__()
         self.engine = engine
 
+    @add_debug_logging_to_render
     def render_GET(self, request: Request) -> bytes:
         request.setHeader(b"Content-Type", b"application/json")
         engine_status_report = get_engine_status(self.engine)
@@ -88,7 +115,8 @@ class StatsResource(Resource):
     def __init__(self, stats: StatsCollector):
         super().__init__()
         self.stats = stats
-
+    
+    @add_debug_logging_to_render
     def render_GET(self, request: Request) -> bytes:
         request.setHeader(b"Content-Type", b"application/json")
         response_data = self.stats.get_stats()
@@ -101,20 +129,41 @@ class GeneralDataResource(Resource):
     isLeaf = True
     general_data = {}
 
+    
+    @add_debug_logging_to_render
     def render_GET(self, request: Request) -> bytes:
         request.setHeader(b"Content-Type", b"application/json")
-        return dumps_as_bytes(self.general_data)
+        response_data = self.general_data
+        return dumps_as_bytes(response_data)
 
 
 class RootResource(Resource):
     """Root resource, only used for the /info/ endpoint, no other uses"""
 
-    def __init__(self, crawler: Crawler, sensetive_keys: list[str] = []):
+    def __init__(
+        self, crawler: Crawler, childs: list = [dict], child_prefix: str = "child_"
+    ):
         super().__init__()
 
-        self.putChild(b"engine", EngineStatusResource(crawler.engine))
-        self.putChild(b"stats", StatsResource(crawler.stats))
-        self.putChild(b"settings", SettingsResource(crawler.settings, sensetive_keys))
-        self.putChild(b"slot", SlotResource(crawler.engine.slot))
-        self.g_r = GeneralDataResource()
-        self.putChild(b"general", self.g_r)
+        self.logger.debug(
+            f"Creating RootResource for crawler {crawler} with childs: {childs}"
+        )
+        NOTSET = object()
+        for child in childs:
+            _class = load_object(child["class"])
+            args = child.get("args", NOTSET)
+            kwargs = child.get("kwargs", NOTSET)
+            if args is NOTSET and kwargs is NOTSET:
+                inst = _class()
+            elif args is not NOTSET and kwargs is NOTSET:
+                inst = _class(*child["args"])
+            elif kwargs is not NOTSET and args is NOTSET:
+                inst = _class(**child["kwargs"])
+            elif kwargs is not NOTSET and args is not NOTSET:
+                inst = _class(*child["args"], **child["kwargs"])
+            else:
+                self.logger.error("???")
+                continue
+
+            self.putChild(child["name"], inst)
+            setattr(self, child_prefix + child["name"].decode(), inst)

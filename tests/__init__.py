@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING
 
 import scrapy.signals
 from scrapy.core.scheduler import BaseScheduler
@@ -9,8 +12,10 @@ from twisted.trial.unittest import TestCase
 from twisted.web.client import Agent
 
 from spider_info_webservice import InfoService
-from spider_info_webservice.utils import prepare_for_serialisation, not_default_settings
+from spider_info_webservice.utils import not_default_settings, prepare_for_serialisation
 
+if TYPE_CHECKING:
+    from typing import Optional
 
 class MockSlot:
     def __init__(self):
@@ -107,7 +112,7 @@ class TestInfoService(TestCase):
         self.crawler.engine.start()
         await self.crawler.signals.send_catch_log_deferred(scrapy.signals.spider_opened)
 
-    async def _req(self, to, user, passwd, params: None | dict = None):
+    async def _req(self, to: str, user: bytes, passwd: bytes, params: Optional[dict] = None):
         from base64 import b64encode
 
         from twisted.internet import reactor
@@ -148,9 +153,9 @@ class TestInfoService(TestCase):
     async def test_default_callback(self):
         from twisted.internet import reactor
         from twisted.internet.endpoints import serverFromString
+        from twisted.web.http import Request
         from twisted.web.resource import Resource
         from twisted.web.server import Site
-        from twisted.web.http import Request
 
         def render(req: Request):
             general = json.loads(req.content.read().decode())

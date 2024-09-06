@@ -1,38 +1,58 @@
 from __future__ import annotations
 
-__version__ = "0.0.2"
-
 import logging
+import warnings
 from typing import TYPE_CHECKING
+
 import scrapy
 import scrapy.signals
 from scrapy.exceptions import NotConfigured
 from scrapy.utils.defer import maybe_deferred_to_future
 
-from .utils import get_child_resources, create_port, get_project_name_from_config
+from .utils import create, get_child_resources, get_project_name_from_config
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from scrapy.crawler import Crawler
-    from twisted.web import resource
-    from .resources import RootResource
     from twisted.internet.tcp import Port
+    from twisted.web import resource
+
+    from .resources import RootResource
 
 logger = logging.getLogger(__name__)
 
 
 class InfoService:
     def __init__(self, crawler: Crawler):
-        crawler.signals.connect(self._start, signal=scrapy.signals.engine_started)
+        crawler.signals.connect(self._start, signal=scrapy.signals.spider_opened)
         crawler.signals.connect(
-            self.default_start_callback, signal=scrapy.signals.engine_started
+            self.default_start_callback, signal=scrapy.signals.spider_opened
         )
         crawler.signals.connect(self._stop, signal=scrapy.signals.engine_stopped)
         crawler.signals.connect(
             self.default_stop_callback, signal=scrapy.signals.engine_stopped
         )
 
-        self.portrange = crawler.settings.get("STATS_SERVER_PORTRANGE", (6024, 8000))
-        self.host = crawler.settings.get("STATS_SERVER_HOST", "127.0.0.1")
+        portrange_deprecated = crawler.settings.get("STATS_SERVER_PORTRANGE")
+        if portrange_deprecated:
+            warnings.warn(
+                "STATS_SERVER_PORTRANGE is deprecated in 0.0.3. Use INFO_SERVICE_PORTRANGE instead.",
+                DeprecationWarning,
+            )
+        host_deprecated = crawler.settings.get("STATS_SERVER_HOST")
+        if host_deprecated:
+            warnings.warn(
+                "STATS_SERVER_HOST is deprecated in 0.0.3. Use INFO_SERVICE_HOST instead.",
+                DeprecationWarning,
+            )
+
+        self.portrange = portrange_deprecated or crawler.settings.get(
+            "INFO_SERVICE_PORTRANGE", (6024, 8000)
+        )
+        self.host = host_deprecated or crawler.settings.get(
+            "INFO_SERVICE_HOST", "127.0.0.1"
+        )
         self.settings_sensetive_keys = crawler.settings.get(
             "INFO_SERVICE_SENSITIVE_KEYS",
             [r"^INFO_SERVICE_USERS$", r".*_PASS(?:WORD)?$", r".*_USER(?:NAME)?$"],
@@ -42,16 +62,64 @@ class InfoService:
         self.port: Port | None = None
         self.crawler: Crawler = crawler
 
+        self.resources_child_prefix = self.crawler.settings.get(
+            "INFO_SERVICE_RESOURCES_CHILD_PREFIX", "child_"
+        )
+
+        info_report_url_deprecated = self.crawler.settings.get("INFO_REPORT_URL")
+        if info_report_url_deprecated:
+            warnings.warn(
+                "INFO_REPORT_URL is deprecated in 0.0.3. Use INFO_SERVICE_REPORT_URL instead.",
+                DeprecationWarning,
+            )
+        self.info_report_url = info_report_url_deprecated or self.crawler.settings.get(
+            "INFO_SERVICE_REPORT_URL",
+        )
+        self.resources: list[dict[str, Any]] | None = None
+
+    def prep_resources(self):
+        self.resources = self.crawler.settings.get(
+            "INFO_SERVICE_RESOURCES",
+            [
+                {
+                    "name": b"engine",
+                    "class": "spider_info_webservice.resources.EngineStatusResource",
+                    "args": [self.crawler.engine],
+                },
+                {
+                    "name": b"slot",
+                    "class": "spider_info_webservice.resources.SlotResource",
+                    "args": [self.crawler.engine.slot],
+                },
+                {
+                    "name": b"settings",
+                    "class": "spider_info_webservice.resources.SettingsResource",
+                    "args": [self.crawler.settings, self.settings_sensetive_keys],
+                },
+                {
+                    "name": b"stats",
+                    "class": "spider_info_webservice.resources.StatsResource",
+                    "args": [self.crawler.stats],
+                },
+                {
+                    "name": b"general",
+                    "class": "spider_info_webservice.resources.GeneralDataResource",
+                },
+            ],
+        )
+
     def _start(self):
+        self.prep_resources()
         try:
             r: resource.Resource
             root_resource: RootResource
-            r, root_resource, self.port = create_port(
+            r, root_resource, self.port = create(
                 users=self.users,
                 host=self.host,
                 portrange=self.portrange,
                 crawler=self.crawler,
-                sensetive_keys=self.settings_sensetive_keys,
+                resources=self.resources,
+                resources_child_prefix=self.resources_child_prefix,
             )
             logger.info(
                 f"Service started on {self.port.getHost().host}:{self.port.getHost().port}"
@@ -60,8 +128,11 @@ class InfoService:
             raise NotConfigured(
                 f"Failed to start service in portrange {self.portrange}"
             )
+        except Exception as e:
+            raise NotConfigured(f"Failed to start service: {e}")
 
         import os
+
         from scrapy.utils.versions import scrapy_components_versions
 
         self.general_data.update(
@@ -79,29 +150,38 @@ class InfoService:
                 "available_resources": get_child_resources(r),
             }
         )
-        root_resource.g_r.general_data = self.general_data
+        getattr(
+            root_resource, self.resources_child_prefix + "general"
+        ).general_data = self.general_data
 
     async def _stop(self):
-        await maybe_deferred_to_future(self.port.stopListening())
+        if d := self.port.stopListening():
+            await maybe_deferred_to_future(d)
 
     @classmethod
     def from_crawler(cls, crawler: Crawler):
         ext = cls(crawler)
         return ext
 
-    def default_start_callback(self):
-        info_report_url = self.crawler.settings.get("INFO_REPORT_URL")
-        if not info_report_url:
+    async def default_start_callback(self):
+        if not self.info_report_url:
             return
 
-        import urllib.request
-        import json
+        def send_report():
+            import json
+            import urllib.request
 
-        data = json.dumps(self.general_data).encode("utf-8")
-        req = urllib.request.Request(
-            info_report_url, data=data, headers={"Content-Type": "application/json"}
-        )
-        urllib.request.urlopen(req)
+            data = json.dumps(self.general_data).encode("utf-8")
+            req = urllib.request.Request(
+                self.info_report_url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(req)
+
+        from twisted.internet.threads import deferToThread
+
+        await maybe_deferred_to_future(deferToThread(send_report))
 
     def default_stop_callback(self):
         pass

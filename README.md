@@ -1,6 +1,10 @@
 # spider-info-webservice
 
-Scrapy extension for monitoring your spiders. Inspired by Scrapy's built-in Telnet console extension and deprecated `scrapy-jsonrpc` (https://github.com/scrapy-plugins/scrapy-jsonrpc) and also presented in Scrapy 0.24 WebService built-in extension (https://docs.scrapy.org/en/0.24/topics/webservice.html).
+Scrapy extension for monitoring your spiders. 
+
+How to access it, if I have million spiders on one machine? Easy! This extension have `default_start_callback`, that sends request to your `INFO_SERVICE_REPORT_URL` with its own unique URL for each spider.
+
+Inspired by Scrapy's built-in Telnet console extension and deprecated `scrapy-jsonrpc` (https://github.com/scrapy-plugins/scrapy-jsonrpc) and also presented in Scrapy 0.24 WebService built-in extension (https://docs.scrapy.org/en/0.24/topics/webservice.html).
 
 Every time I used Telnet, it all came down to calling several methods to show information, so I made this extension, which conveniently serves basic information about spider via HTTP.
 
@@ -36,15 +40,29 @@ All done! Now you can access to endpoints via your favourite cli http request to
 
 ### Extension settings
 
-`STATS_SERVER_PORTRANGE`: defaults to `(6024, 8000)`
+`INFO_SERVICE_PORTRANGE`: defaults to `(6024, 8000)`.
 
-`STATS_SERVER_HOST`: defaults to `"127.0.0.1"`
+`INFO_SERVICE_HOST`: defaults to `"127.0.0.1"`.
 
-`INFO_SERVICE_USERS`: dictionary containing key-value pairs like `username: password`, used for basic HTTP auth, defaults to `{"scrapy": b"scrapy"}`
+`INFO_SERVICE_USERS`: defaults to `{"scrapy": b"scrapy"}`. Dictionary of type `dict[str, bytes]` containing key-value pairs like `username: password`, used for basic HTTP auth.
 
-`INFO_REPORT_URL`: optional. Extension will send a request to a given url with json containing general info about running spider and `host:port` of this service. 
+`INFO_SERVICE_REPORT_URL`: optional. Extension will send a request to a given url with json containing general info about running spider and `host:port` of this service. 
 
-`INFO_SERVICE_SENSITIVE_KEYS`: optional, defaults to `[r"^INFO_SERVICE_USERS$", r".*_PASS(?:WORD)?$", r".*_USER(?:NAME)?$"]`. List of strings, that will compile to regex. They will try to match all keys in `settings` (recursively) and if key is matched, replace value with asterisks.
+`INFO_SERVICE_SENSITIVE_KEYS`: optional. Defaults to `[r"^INFO_SERVICE_USERS$", r".*_PASS(?:WORD)?$", r".*_USER(?:NAME)?$"]`. List of strings, that will compile to regex. They will try to match all keys in `settings` (recursively) and if key is matched, replace value with asterisks.
+
+`INFO_SERVICE_RESOURCES_CHILD_PREFIX`: optional. Prefix for accesing child resources from extension.
+
+`INFO_SERVICE_RESOURCES`: optional. List of resources dicts like: 
+```python
+{
+  "name": b"name_of_resource",
+  "class": "path.to.ResourseClass",
+  "args": [args, that, resource, needs] # optional
+  "kwargs": {"kwargs": for_resource} # optional
+}
+```
+All resources are being initialised at `scrapy.signals.spider_opened` signal in `prep_resources` method. If you want to modify available resources, redefine this list at `settings.py`. For more control over `args` and `kwargs` that you could pass to resource, redefine this setting at `spider_opened` method in your `Spider` class or derive from this extension and override `prep_resources` method.
+
 
 ### Endpoints
 
@@ -52,7 +70,7 @@ All done! Now you can access to endpoints via your favourite cli http request to
 
 Example response: 
 
-```python
+```json
 {
   "pid": 1605,
   "project_name": "quotes_scraper/name_from_scrapy.cfg",
@@ -120,10 +138,10 @@ Example response:
 }
 ```
 
-`info/stats`: Spider stats (`crawler.stats.get_stats()`)
+`info/stats`: Spider stats (`crawler.stats.get_stats()`).
 
 Example response:
-```python
+```json
 {
   "log_count/WARNING": 1,
   "log_count/DEBUG": 6,
@@ -150,7 +168,7 @@ Example response:
 `info/slot`: list of in-progress requests.
 
 Example response:
-```python
+```json
 {
   "in_progress_requests": [
     {
@@ -226,7 +244,7 @@ Example response:
 `info/engine`: Info about execution engine.
 
 Example response:
-```python
+```json
 {
   "time()-engine.start_time": 423.9953444004059,
   "len(engine.downloader.active)": 0,
@@ -245,8 +263,28 @@ Example response:
 }
 ```
 
-`info/settings`: Spider settings. No example response, it's too big :)
+`info/settings`: Spider settings. When passing `"all=true"` as param, will return all the existing settings, when passing `"all=false"`, will return only non-default settings.
 
-## Tests
+Example response:
+```json
+{
+    "REQUEST_FINGERPRINTER_IMPLEMENTATION": "2.7",
+    "TELNETCONSOLE_ENABLED": false,
+    "INFO_SERVICE_USERS": {
+        "scrapy": "scrapy",
+        "test": "test",
+        "test2": "test2"
+    },
+    "VERY_SENSETIVE_INFO": "******",
+    "SENSETIVE_INFO_1": "******",
+    "SENSETIVE_INFO_2": "******",
+    "SENSETIVE_INFO_3": "******",
+    "INFO_SERVICE_SENSITIVE_KEYS": [
+        "^.*SENSETIVE_INFO.*$"
+    ]
+}
+```
 
-~~None! Real men didn't write any tests.~~ Don't have any yet.
+## Tests 
+
+Yes.

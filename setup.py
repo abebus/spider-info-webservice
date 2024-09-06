@@ -15,7 +15,7 @@ setup(
     author_email="anamaev263@gmail.com",
     version="0.0.4",
     url="https://github.com/abebus/spider-info-webservice",
-    packages=find_packages(),
+    packages=find_packages(exclude=["test"]),
     install_requires=["scrapy>=2.6"],
     classifiers=[
         "Programming Language :: Python",

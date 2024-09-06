@@ -1,7 +1,5 @@
 from setuptools import setup, find_packages
 
-
-VERSION = "0.0.2"
 DESCRIPTION = "Scrapy extension for monitoring spider."
 
 setup(
@@ -10,7 +8,7 @@ setup(
     long_description=DESCRIPTION,
     author="abebus",
     author_email="anamaev263@gmail.com",
-    version=VERSION,
+    version="0.0.3",
     url="https://github.com/abebus/spider-info-webservice",
     packages=find_packages(),
     install_requires=["scrapy>=2.6"],

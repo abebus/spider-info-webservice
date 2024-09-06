@@ -1,5 +1,7 @@
 # spider-info-webservice
 
+[![Tests](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml/badge.svg)](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml)
+
 Scrapy extension for monitoring your spiders. 
 
 How to access it, if I have million spiders on one machine? Easy! This extension have `default_start_callback`, that sends request to your `INFO_SERVICE_REPORT_URL` with its own unique URL for each spider.
@@ -24,7 +26,7 @@ pip install git+https://github.com/abebus/spider-info-webservice
 
 Scrapy >= 2.6
 
-Python >= 3.12 (I haven't tested it on other versions)
+Python from 3.8 to 3.12
 
 ## Usage
 

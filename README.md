@@ -1,6 +1,6 @@
 # spider-info-webservice
 
-[![Tests](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml/badge.svg)](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml)
+[![Tests](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml/badge.svg)](https://github.com/abebus/spider-info-webservice/actions/workflows/tests.yml) [![Downloads](https://static.pepy.tech/badge/spider-info-webservice)](https://pepy.tech/project/spider-info-webservice)
 
 Scrapy extension for monitoring your spiders. 
 

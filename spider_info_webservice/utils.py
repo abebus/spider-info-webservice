@@ -34,7 +34,7 @@ except ImportError:
 else:
 
     def dumps_as_bytes(obj, **kwargs) -> bytes:
-        if default := kwargs.popi("default", None):
+        if default := kwargs.pop("default", None):
             default = default
         else:
             default = str
